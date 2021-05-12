@@ -561,7 +561,7 @@ void update() override {
         currentSystemState=sunavailable;
         
 
-
+        if (vista.cbuf[0]==0xf7) {
             memcpy(p1,vista.statusFlags.prompt,16);
             memcpy(p2,&vista.statusFlags.prompt[16],16);
             p1[16]='\0';
@@ -578,7 +578,7 @@ void update() override {
             if (lastbeeps != vista.statusFlags.beeps)
                 beepsCallback(to_string(vista.statusFlags.beeps));
             lastbeeps=vista.statusFlags.beeps;
-
+        }
         //publishes lrr status messages
         if ((vista.cbuf[0]==0xf9 && vista.cbuf[3]==0x58) || firstRun ) { //we show all lrr messages with type 58
             int c,q,z;

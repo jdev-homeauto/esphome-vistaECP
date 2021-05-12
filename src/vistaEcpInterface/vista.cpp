@@ -890,7 +890,7 @@ bool Vista::handle()
     memset(cbuf, 0, szCbuf); //clear buffer mem
     
     //expander request command
-    if (x == 0x98) {
+    if (x == 0x96) {
         newCmd=true;        
         gidx=0;
 		cbuf[ gidx++ ] = x;
@@ -1001,9 +1001,10 @@ bool Vista::handle()
 	//for debugging if needed
     if (expectByte == 0 ) {
        // #ifdef DEBUG
+        newCmd=true;
         gidx = 0;
 		cbuf[ gidx++ ] = x;
-       readChars(8, cbuf, &gidx, 8);
+       readChars(4, cbuf, &gidx, 4);
        // #endif
 		return 1;
 	}
