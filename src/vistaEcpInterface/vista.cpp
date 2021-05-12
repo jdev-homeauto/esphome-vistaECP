@@ -890,7 +890,7 @@ bool Vista::handle()
     memset(cbuf, 0, szCbuf); //clear buffer mem
     
     //expander request command
-    if (x == 0x96) {
+    if (x == 0x98) {
         newCmd=true;        
         gidx=0;
 		cbuf[ gidx++ ] = x;
