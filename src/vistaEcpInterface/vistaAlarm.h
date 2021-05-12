@@ -49,7 +49,8 @@ class vistaECPHome : public PollingComponent, public CustomAPIDevice {
   std::function<void (const char*)> systemStatusChangeCallback;
   std::function<void (sysState, bool)> statusChangeCallback;
   std::function<void (const char*)> systemMsgChangeCallback;    
-  std::function<void (const char*)>lrrMsgChangeCallback;  
+  std::function<void (const char*)>lrrMsgChangeCallback; 
+  std::function<void (const char*)>rfMsgChangeCallback;   
   std::function<void (const char*)>line1DisplayCallback; 
   std::function<void (const char*)>line2DisplayCallback;  
   std::function<void (std::string)>beepsCallback;   
@@ -91,6 +92,7 @@ class vistaECPHome : public PollingComponent, public CustomAPIDevice {
   void onLine2DisplayChange(std::function<void (const char* msg)> callback) { line2DisplayCallback = callback; }
   void onBeepsChange(std::function<void (std::string beeps)> callback) { beepsCallback = callback; }
   void onRelayStatusChange(std::function<void (uint8_t addr,uint8_t zone, bool state)> callback) { relayStatusChangeCallback = callback; }
+  void onRfMsgChange(std::function<void (const char* msg)> callback) { rfMsgChangeCallback = callback; }
     
   byte debug;
   char kpaddr;
@@ -120,6 +122,7 @@ class vistaECPHome : public PollingComponent, public CustomAPIDevice {
     std::string lastp2;
     int lastbeeps;
     char msg[50];
+
     
     //add zone ttl array.  zone, last seen (millis)
     struct {
@@ -473,40 +476,41 @@ void update() override {
             printPacket("CMD",vista.cbuf,12);
             vista.newCmd=false;
        }
+       
         //process ext messages for zones
         if (vista.newExtCmd ) {
             if (debug > 0)
                 printPacket("EXT",vista.extcmd,12);
-           vista.newExtCmd=false;
+            vista.newExtCmd=false;
              //format: [0x98] [deviceid] [subcommand] [channel/zone] [on/off] [relaydata]
              
             
            if (vista.extcmd[0]==0x98) {
-            uint8_t z=vista.extcmd[3];
-            zoneState zs;
-            if (vista.extcmd[2]==0xf1 && z > 0 && z <= MAX_ZONES) { // we have a zone status (zone expander address range)
-              zs=vista.extcmd[4]?zopen:zclosed;
+                uint8_t z=vista.extcmd[3];
+                zoneState zs;
+                if (vista.extcmd[2]==0xf1 && z > 0 && z <= MAX_ZONES) { // we have a zone status (zone expander address range)
+                    zs=vista.extcmd[4]?zopen:zclosed;
                   //only update status for zones that are not alarmed or bypassed
-              if (zones[z].state != zbypass && zones[z].state != zalarm) {
-                    if (zones[z].state != zs) {
-                        if (zs==zopen)
-                            zoneStatusChangeCallback(z,"O");
-                        else
-                            zoneStatusChangeCallback(z,"C");
-                    }
-                    zones[z].time=millis();
-                    zones[z].state=zs;
-                    setGlobalState(z,zs); 
+                    if (zones[z].state != zbypass && zones[z].state != zalarm) {
+                        if (zones[z].state != zs) {
+                            if (zs==zopen)
+                                zoneStatusChangeCallback(z,"O");
+                            else
+                                zoneStatusChangeCallback(z,"C");
+                        }
+                        zones[z].time=millis();
+                        zones[z].state=zs;
+                        setGlobalState(z,zs); 
 
-              }
-            } else if (vista.extcmd[2]==0x00) { //relay update z = 1 to 4
-                if (z > 0) {
-                    relayStatusChangeCallback(vista.extcmd[1],z,vista.extcmd[4]?true:false);
-                    ESP_LOGD("debug","Got relay address %d channel %d = %d",vista.extcmd[1],z,vista.extcmd[4]);
-                }
-            } else if (vista.extcmd[2]==0xf7) { //30 second zone expander module status update
-                   uint8_t faults=vista.extcmd[4];
-                   for(int x=8;x>0;x--) {
+                    }
+                } else if (vista.extcmd[2]==0x00) { //relay update z = 1 to 4
+                    if (z > 0) {
+                        relayStatusChangeCallback(vista.extcmd[1],z,vista.extcmd[4]?true:false);
+                        ESP_LOGD("debug","Got relay address %d channel %d = %d",vista.extcmd[1],z,vista.extcmd[4]);
+                    }   
+                } else if (vista.extcmd[2]==0xf7) { //30 second zone expander module status update
+                    uint8_t faults=vista.extcmd[4];
+                    for(int x=8;x>0;x--) {
                             z=getZoneFromChannel(vista.extcmd[1],x); //device id=extcmd[1]
                             if (!z) continue;
                             zs=faults&1?zopen:zclosed; //check first bit . lower bit = channel 8. High bit= channel 1
@@ -524,10 +528,30 @@ void update() override {
                             }
                           
                             faults=faults >> 1; //get next zone status bit from field
-                   }
+                    }
                
+                }
+            }  else if (vista.extcmd[0]==0x9E && vista.extcmd[1] == 4) {
+                char rf_serial_char[14];
+                char value_char[2];
+                uint32_t device_serial = (vista.extcmd[2] << 16) + (vista.extcmd[3] << 8) + vista.extcmd[4];
+                sprintf(rf_serial_char, "%03d%04d:%02x", device_serial / 10000, device_serial % 10000,vista.extcmd[5]);
+                ESP_LOGD("info","RFX: %s",rf_serial_char);
+                rfMsgChangeCallback(rf_serial_char);
+              
             }
-           }
+            /* rf_serial_char
+            
+            	1 - ? (loop flag?)
+                2 - Low battery
+                3 -	Supervision required 
+                4 - ?
+                5 -	Loop 3 
+                6 -	Loop 2 
+                7 -	Loop 4 
+                8 -	Loop 1 
+            
+            */
         }
     
 
